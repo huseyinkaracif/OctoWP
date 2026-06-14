@@ -1,0 +1,72 @@
+{
+  "name": "octowp",
+  "version": "0.1.0",
+  "description": "Single-number safety-first WhatsApp bulk messaging desktop app",
+  "main": "./out/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "predev": "node scripts/rebuild-native.mjs electron",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "prepreview": "node scripts/rebuild-native.mjs electron",
+    "preview": "electron-vite preview",
+    "postinstall": "node scripts/rebuild-native.mjs electron",
+    "rebuild:native": "node scripts/rebuild-native.mjs electron",
+    "pretest": "node scripts/rebuild-native.mjs node",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "prepackage": "node scripts/rebuild-native.mjs electron",
+    "package": "electron-vite build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.octowp.app",
+    "productName": "OctoWP",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "OctoWP-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "better-sqlite3": "^12.10.0",
+    "lucide-react": "^1.18.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.5.0",
+    "electron": "^39.8.10",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.5",
+    "vitest": "^4.1.8"
+  }
+}
