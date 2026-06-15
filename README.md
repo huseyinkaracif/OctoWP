@@ -1,12 +1,12 @@
 # OctoWP
 
-OctoWP, Electron + React tabanli bir masaustu WhatsApp operasyon uygulamasidir.
-Tek numara uzerinden kampanya yonetimi, kisi/liste segmentasyonu, otomatik takip ve loglama ozellikleri sunar.
+OctoWP is a desktop WhatsApp operations tool built with Electron and React.
+It provides campaign management, contact/list segmentation, automated follow-ups, and local logging in a single application.
 
-Onemli not:
-Bu proje resmi olmayan bir baglanti katmani kullanir. WhatsApp politikalarina aykiri kullanim ban riski dogurur. Sadece izinli ve riza temelli listelerle kullanin.
+Important note:
+This project uses an unofficial WhatsApp connection layer. Improper use may violate platform policies and can lead to account restrictions. Use only with consent-based and permissioned contact lists.
 
-## Teknoloji
+## Tech Stack
 
 - Electron
 - React + Vite
@@ -14,51 +14,56 @@ Bu proje resmi olmayan bir baglanti katmani kullanir. WhatsApp politikalarina ay
 - SQLite (better-sqlite3)
 - Vitest
 
-## Klasor yapisi
+## Project Structure
 
-- electron/: main process, DB, kampanya motoru, IPC handler'lari
-- src/: renderer UI ekranlari ve bilesenler
-- shared/: main-renderer ortak tipler
-- tests/: birim ve entegrasyon testleri
-- docs/: tasarim ve manuel test dokumanlari
+- electron/: main process, database layer, campaign engine, IPC handlers
+- src/: renderer UI screens and components
+- shared/: shared types between main and renderer
+- tests/: unit and integration tests
+- docs/: design and manual test documentation
 
-## Gereksinimler
+## Requirements
 
-- Node.js 22 veya ustu
+- Node.js 22+
 - Windows
 
-## Kurulum
+## Setup
 
-1. Bagimliliklari kur:
+1. Install dependencies:
 	npm install
-2. Gelistirme modunu baslat:
+2. Start development mode:
 	npm run dev
 
-## Scriptler
+## Scripts
 
-- npm run dev: gelistirme modu
-- npm test: testleri calistir
-- npm run build: proje derleme
-- npm run package: Windows kurulum paketi uretimi
+- npm run dev: start development mode
+- npm test: run test suite
+- npm run build: build the project
+- npm run package: generate Windows installer package
 
-## Native moduller notu
+## Native Module Note
 
-better-sqlite3 native oldugu icin Electron ve Node ABI farki vardir.
-Projedeki scriptler gerekli rebuild adimini otomatik yonetir:
+better-sqlite3 is a native module, and Electron and Node use different ABIs.
+Project scripts handle the required rebuild flow automatically:
 
-- npm install / npm run dev / npm run package: Electron ABI tarafi
-- npm test: Node ABI tarafi
+- npm install / npm run dev / npm run package: Electron ABI side
+- npm test: Node ABI side
 
-## Test
+## Testing
 
-Testleri calistirmak icin:
+Run tests with:
 
 npm test
 
-Manuel akislar icin:
+For manual verification flows:
 
 - docs/MANUAL-TEST.md
 
-## Lisans
+## License
 
 MIT
+
+## Author and Purpose
+
+This project was built by Hüseyin Karacif.
+It was created to solve real operational needs, not for commercial exploitation.
