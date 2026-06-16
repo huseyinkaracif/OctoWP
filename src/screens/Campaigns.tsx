@@ -31,7 +31,7 @@ function mediaTypeOf(path: string): MediaType {
 }
 
 function previewRender(t: string): string {
-  const withVars = t.replace(/\{(ad|name|isim)\}/gi, 'Ahmet')
+  const withVars = t.replace(/\{(ad|name|isim|listeadı)\}/gi, 'Ahmet')
   return withVars.replace(/\{([^{}]*\|[^{}]*)\}/g, (_, inner: string) => inner.split('|')[0])
 }
 
@@ -307,14 +307,14 @@ function Composer({ onBack, onCreated }: { onBack: () => void; onCreated: (id: n
             )}
             <Field
               label="Mesaj"
-              hint="Değişken: {ad} · Spintax: {Merhaba|Selam} — her mesaj rastgele seçer"
+              hint="Değişken: {ad} veya {listeadı} (listedeki isim) · Spintax: {Merhaba|Selam} — her mesaj rastgele seçer"
             >
               <TextArea rows={5} placeholder="{Merhaba|Selam} {ad}, ..." value={message} onChange={(e) => setMessage(e.target.value)} />
             </Field>
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-slate-400">Ekle:</span>
-              {['{ad}', '{Merhaba|Selam}'].map((t) => (
+              {['{ad}', '{listeadı}', '{Merhaba|Selam}'].map((t) => (
                 <button
                   key={t}
                   onClick={() => insertVar(t)}

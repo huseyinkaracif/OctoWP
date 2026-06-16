@@ -42,9 +42,11 @@ describe('mapRows', () => {
     expect(skipped[0].row).toBe(3) // invalid is data row 2 -> file row 3
   })
 
-  it('exposes name as {ad} and keeps extra vars', () => {
+  it('exposes name as {ad}, {name}, {listeadı} and keeps extra vars', () => {
     const { contacts } = mapRows(rows, { phone: 'Telefon', name: 'Ad', vars: ['Sehir'] }, '90')
     expect(contacts[0].vars.ad).toBe('Ali')
+    expect(contacts[0].vars.name).toBe('Ali')
+    expect(contacts[0].vars['listeadı']).toBe('Ali')
     expect(contacts[0].vars.Sehir).toBe('İzmir')
   })
 })

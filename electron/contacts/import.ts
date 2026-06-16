@@ -42,7 +42,7 @@ export function readSheetFile(filePath: string): ParsedSheet {
 /**
  * Map raw rows to normalized contacts using the column mapping.
  * Skips rows with invalid phones and in-file duplicates. The mapped name is
- * also exposed as the `{ad}` and `{name}` template variables.
+ * also exposed as the `{ad}`, `{name}` and `{listeadı}` template variables.
  */
 export function mapRows(
   rows: Record<string, string>[],
@@ -75,6 +75,7 @@ export function mapRows(
     if (name) {
       vars.ad = name
       vars.name = name
+      vars['listeadı'] = name
     }
     contacts.push({ phone, name, vars })
   })
