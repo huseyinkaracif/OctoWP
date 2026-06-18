@@ -66,19 +66,102 @@ export function mapRows(
       return
     }
     seen.add(phone)
-
-    const name = mapping.name && row[mapping.name] ? row[mapping.name] : null
-    const vars: Record<string, string> = {}
-    for (const col of mapping.vars ?? []) {
-      if (row[col]) vars[col] = row[col]
-    }
-    if (name) {
-      vars.ad = name
-      vars.name = name
-      vars['listeadı'] = name
-    }
-    contacts.push({ phone, name, vars })
+    contacts.push(buildContact(row, mapping, phone))
   })
 
   return { contacts, skipped }
+}
+
+function buildContact(
+  row: Record<string, string>,
+  mapping: ColumnMapping,
+  phone: string
+): NewContact {
+  const name = mapping.name && row[mapping.name] ? row[mapping.name] : null
+  const vars: Record<string, string> = {}
+  for (const col of mapping.vars ?? []) {
+    if (row[col]) vars[col] = row[col]
+  }
+  if (name) {
+    vars.ad = name
+    vars.name = name
+    vars['listeadı'] = name
+  }
+  return { phone, name, vars }
+}
+
+export interface RegionGroup {
+  region: string
+  contacts: NewContact[]
+}
+
+/**
+ * Like {@link mapRows} but groups contacts by the distinct values of
+ * `regionColumn`. Duplicates and validity are checked per-region, so the same
+ * number may appear in two regions. When `regionFilter` is given, rows outside
+ * it are silently ignored (not reported as skips).
+ */
+export function mapRowsByRegion(
+  rows: Record<string, string>[],
+  mapping: ColumnMapping,
+  regionColumn: string,
+  defaultCountryCode: string,
+  regionFilter?: string[]
+): { groups: RegionGroup[]; skipped: ImportSkip[] } {
+  const groups = new Map<string, NewContact[]>()
+  const skipped: ImportSkip[] = []
+  const seenByRegion = new Map<string, Set<string>>()
+  const filter = regionFilter ? new Set(regionFilter) : null
+
+  rows.forEach((row, i) => {
+    const rowNo = i + 2
+    const region = (row[regionColumn] ?? '').trim()
+    if (!region) {
+      skipped.push({ row: rowNo, reason: 'boş bölge' })
+      return
+    }
+    if (filter && !filter.has(region)) return
+
+    const rawPhone = row[mapping.phone] ?? ''
+    const phone = normalizePhone(rawPhone, defaultCountryCode)
+    if (!phone) {
+      skipped.push({ row: rowNo, reason: `geçersiz numara: "${rawPhone}"` })
+      return
+    }
+    let seen = seenByRegion.get(region)
+    if (!seen) {
+      seen = new Set<string>()
+      seenByRegion.set(region, seen)
+    }
+    if (seen.has(phone)) {
+      skipped.push({ row: rowNo, reason: `dosya içi tekrar: ${phone}` })
+      return
+    }
+    seen.add(phone)
+
+    const arr = groups.get(region) ?? []
+    arr.push(buildContact(row, mapping, phone))
+    groups.set(region, arr)
+  })
+
+  return {
+    groups: [...groups.entries()].map(([region, contacts]) => ({ region, contacts })),
+    skipped
+  }
+}
+
+/** Distinct non-empty values of a column with row counts, sorted by value. */
+export function distinctValues(
+  rows: Record<string, string>[],
+  column: string
+): { value: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const r of rows) {
+    const v = (r[column] ?? '').trim()
+    if (!v) continue
+    counts.set(v, (counts.get(v) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value, 'tr'))
 }

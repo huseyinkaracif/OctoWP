@@ -19,6 +19,10 @@ const api: OctoApi = {
     previewColumns: (filePath) => ipcRenderer.invoke(CH.CONTACTS_PREVIEW, filePath),
     import: (filePath, mapping, listId) =>
       ipcRenderer.invoke(CH.CONTACTS_IMPORT, filePath, mapping, listId),
+    distinctValues: (filePath, column) =>
+      ipcRenderer.invoke(CH.CONTACTS_DISTINCT, filePath, column),
+    importByRegion: (filePath, mapping, opts) =>
+      ipcRenderer.invoke(CH.CONTACTS_IMPORT_REGION, filePath, mapping, opts),
     list: (listId) => ipcRenderer.invoke(CH.CONTACTS_LIST, listId),
     count: () => ipcRenderer.invoke(CH.CONTACTS_COUNT),
     add: (listId, phone, name) => ipcRenderer.invoke(CH.CONTACTS_ADD, listId, phone, name),

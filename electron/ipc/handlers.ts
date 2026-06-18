@@ -5,7 +5,7 @@ import type { Repos } from '../db/repositories'
 import type { WhatsAppPort } from '../wa-engine/port'
 import type { CampaignEngine } from '../campaign-engine/engine'
 import * as XLSX from 'xlsx'
-import { readSheetFile, mapRows } from '../contacts/import'
+import { readSheetFile, mapRows, mapRowsByRegion, distinctValues } from '../contacts/import'
 import { normalizePhone } from '../lib/phone'
 import { applyPreset } from '../lib/presets'
 import { exportBackup, importBackup } from '../settings/backup'
@@ -24,7 +24,15 @@ export interface IpcServices {
 const mappingSchema = z.object({
   phone: z.string(),
   name: z.string().optional(),
-  vars: z.array(z.string()).optional()
+  vars: z.array(z.string()).optional(),
+  region: z.string().optional()
+})
+
+const regionImportSchema = z.object({
+  mode: z.enum(['auto', 'manual']),
+  regions: z.array(z.string()).optional(),
+  targetListId: z.number().int().positive().nullable().optional(),
+  newListName: z.string().optional()
 })
 
 const createSchema = z.object({
@@ -115,6 +123,59 @@ export function registerIpc(s: IpcServices): void {
     const { imported, duplicates } = repos.bulkImportContacts(contacts, Number(listId))
     logger.info('import', `${imported} new, ${duplicates} dup, ${skipped.length} skipped from ${sheet.rows.length} rows`)
     return { total: sheet.rows.length, imported, duplicates, skipped, listId: Number(listId) }
+  })
+
+  handle(CH.CONTACTS_DISTINCT, (filePath: string, column: string) => {
+    const sheet = readSheetFile(String(filePath))
+    return distinctValues(sheet.rows, String(column))
+  })
+
+  handle(CH.CONTACTS_IMPORT_REGION, (filePath: string, mapping: unknown, opts: unknown) => {
+    const m = mappingSchema.parse(mapping)
+    const o = regionImportSchema.parse(opts)
+    if (!m.region) throw new Error('region column required')
+    const sheet = readSheetFile(String(filePath))
+    const cc = repos.getSettings().defaultCountryCode
+    const filter = o.mode === 'manual' ? o.regions : undefined
+    const { groups, skipped } = mapRowsByRegion(sheet.rows, m, m.region, cc, filter)
+
+    const resultGroups: { listId: number; listName: string; imported: number; duplicates: number }[] = []
+    let imported = 0
+    let duplicates = 0
+
+    if (o.mode === 'manual') {
+      const list = o.targetListId
+        ? repos.getList(Number(o.targetListId))
+        : repos.createList((o.newListName || 'İçe aktarılan').slice(0, 120))
+      if (!list) throw new Error('target list not found')
+      const all = groups.flatMap((g) => g.contacts)
+      const res = repos.bulkImportContacts(all, list.id)
+      imported = res.imported
+      duplicates = res.duplicates
+      resultGroups.push({ listId: list.id, listName: list.name, ...res })
+    } else {
+      for (const g of groups) {
+        const list = repos.createList(g.region.slice(0, 120))
+        const res = repos.bulkImportContacts(g.contacts, list.id)
+        imported += res.imported
+        duplicates += res.duplicates
+        resultGroups.push({ listId: list.id, listName: list.name, ...res })
+      }
+    }
+
+    const primaryListId = resultGroups[0]?.listId ?? 0
+    logger.info(
+      'import',
+      `region(${o.mode}): ${imported} new into ${resultGroups.length} list(s), ${duplicates} dup, ${skipped.length} skipped from ${sheet.rows.length} rows`
+    )
+    return {
+      total: sheet.rows.length,
+      imported,
+      duplicates,
+      skipped,
+      listId: primaryListId,
+      groups: resultGroups
+    }
   })
 
   handle(CH.CONTACTS_LIST, (listId?: number) =>

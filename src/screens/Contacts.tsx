@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Upload, Plus, Ban, Trash2, UserX, X, UserPlus, RefreshCcw, Download, Tag as TagIcon, Search, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
-import type { Contact, ListDTO, ImportPreview, ImportResult, ColumnMapping, OptOutEntry, Tag } from '@shared/types'
+import type { Contact, ListDTO, ImportPreview, ImportResult, ColumnMapping, RegionImportOptions, DistinctValue, OptOutEntry, Tag } from '@shared/types'
 import { octo } from '../lib/ipc'
 import { useToast } from '../lib/toast'
 import { Card, SectionTitle, Button, Badge, TextInput, Field, Spinner } from '../components/ui'
@@ -89,7 +89,11 @@ export function Contacts() {
   const onImported = async (r: ImportResult) => {
     setImportState(null)
     setResult(r)
-    toast(`${r.imported} kişi eklendi`, 'success')
+    const msg =
+      r.groups && r.groups.length > 1
+        ? `${r.groups.length} liste oluşturuldu · ${r.imported} kişi eklendi`
+        : `${r.imported} kişi eklendi`
+    toast(msg, 'success')
     await loadLists()
     setSelected(r.listId)
     octo.contacts.list(r.listId).then(setContacts)
@@ -174,6 +178,9 @@ export function Contacts() {
       {result && (
         <Card className="flex items-center justify-between p-4 ring-1 ring-brand-500/30">
           <div className="text-sm">
+            {result.groups && result.groups.length > 1 && (
+              <><b>{result.groups.length}</b> liste · </>
+            )}
             <b>{result.imported}</b> yeni eklendi · {result.duplicates} tekrar ·{' '}
             <b>{result.skipped.length}</b> atlandı (toplam {result.total} satır)
           </div>
@@ -748,25 +755,76 @@ function ImportModal({
   const [phone, setPhone] = useState(cols[0] ?? '')
   const [name, setName] = useState('')
   const [vars, setVars] = useState<string[]>([])
+  const [region, setRegion] = useState('')
+  const [regionMode, setRegionMode] = useState<'auto' | 'manual'>('auto')
+  const [regionValues, setRegionValues] = useState<DistinctValue[]>([])
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([])
+  const [loadingRegions, setLoadingRegions] = useState(false)
   const [target, setTarget] = useState<string>(lists[0] ? String(lists[0].id) : 'new')
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const varCandidates = useMemo(() => cols.filter((c) => c !== phone && c !== name), [cols, phone, name])
+  const varCandidates = useMemo(
+    () => cols.filter((c) => c !== phone && c !== name && c !== region),
+    [cols, phone, name, region]
+  )
+
+  useEffect(() => {
+    if (!region) {
+      setRegionValues([])
+      setSelectedRegions([])
+      return
+    }
+    setVars((v) => v.filter((c) => c !== region))
+    let active = true
+    setLoadingRegions(true)
+    octo.contacts.distinctValues(flow.file, region).then((vals) => {
+      if (!active) return
+      setRegionValues(vals)
+      setSelectedRegions([])
+      setLoadingRegions(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [region, flow.file])
+
+  const toggleRegionSel = (val: string) =>
+    setSelectedRegions((s) => (s.includes(val) ? s.filter((x) => x !== val) : [...s, val]))
+
+  const showTarget = !region || regionMode === 'manual'
+  const canRun =
+    !!phone &&
+    (!region
+      ? true
+      : regionMode === 'auto'
+        ? regionValues.length > 0
+        : selectedRegions.length > 0)
 
   const run = async () => {
     setBusy(true)
     try {
-      let listId: number
-      if (target === 'new') {
-        const l = await octo.lists.create(newName || 'İçe aktarılan')
-        listId = l.id
-      } else {
-        listId = Number(target)
+      const mapping: ColumnMapping = {
+        phone,
+        name: name || undefined,
+        vars,
+        region: region || undefined
       }
-      const mapping: ColumnMapping = { phone, name: name || undefined, vars }
-      const r = await octo.contacts.import(flow.file, mapping, listId)
-      onDone(r)
+      if (region) {
+        const opts: RegionImportOptions =
+          regionMode === 'auto'
+            ? { mode: 'auto' }
+            : {
+                mode: 'manual',
+                regions: selectedRegions,
+                targetListId: target === 'new' ? null : Number(target),
+                newListName: newName || undefined
+              }
+        onDone(await octo.contacts.importByRegion(flow.file, mapping, opts))
+      } else {
+        const listId = target === 'new' ? (await octo.lists.create(newName || 'İçe aktarılan')).id : Number(target)
+        onDone(await octo.contacts.import(flow.file, mapping, listId))
+      }
     } finally {
       setBusy(false)
     }
@@ -829,18 +887,42 @@ function ImportModal({
               </Field>
             )}
 
-            <Field label="Hedef liste">
-              <select className="input-base" value={target} onChange={(e) => setTarget(e.target.value)}>
-                {lists.map((l) => (
-                  <option key={l.id} value={String(l.id)}>
-                    {l.name} ({l.count})
+            <Field label="Bölge sütunu (opsiyonel — listelere böler)">
+              <select className="input-base" value={region} onChange={(e) => setRegion(e.target.value)}>
+                <option value="">— bölme yok —</option>
+                {cols.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
                   </option>
                 ))}
-                <option value="new">+ Yeni liste</option>
               </select>
             </Field>
 
-            {target === 'new' && (
+            {region && (
+              <RegionPanel
+                mode={regionMode}
+                setMode={setRegionMode}
+                loading={loadingRegions}
+                values={regionValues}
+                selected={selectedRegions}
+                onToggle={toggleRegionSel}
+              />
+            )}
+
+            {showTarget && (
+              <Field label={region ? 'Hedef liste (seçili bölgeler buraya)' : 'Hedef liste'}>
+                <select className="input-base" value={target} onChange={(e) => setTarget(e.target.value)}>
+                  {lists.map((l) => (
+                    <option key={l.id} value={String(l.id)}>
+                      {l.name} ({l.count})
+                    </option>
+                  ))}
+                  <option value="new">+ Yeni liste</option>
+                </select>
+              </Field>
+            )}
+
+            {showTarget && target === 'new' && (
               <TextInput placeholder="Yeni liste adı" value={newName} onChange={(e) => setNewName(e.target.value)} />
             )}
 
@@ -853,12 +935,100 @@ function ImportModal({
             <Button variant="ghost" onClick={onClose}>
               Vazgeç
             </Button>
-            <Button onClick={run} disabled={busy || !phone}>
+            <Button onClick={run} disabled={busy || !canRun}>
               {busy ? <Spinner /> : <Upload size={16} />} İçe aktar
             </Button>
           </div>
         </div>
       </Card>
+    </div>
+  )
+}
+
+function RegionPanel({
+  mode,
+  setMode,
+  loading,
+  values,
+  selected,
+  onToggle
+}: {
+  mode: 'auto' | 'manual'
+  setMode: (m: 'auto' | 'manual') => void
+  loading: boolean
+  values: DistinctValue[]
+  selected: string[]
+  onToggle: (val: string) => void
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 dark:border-white/10">
+      <div className="mb-3 flex gap-1 rounded-lg bg-slate-200/60 p-1 dark:bg-white/5 w-fit">
+        <button
+          onClick={() => setMode('auto')}
+          className={cn(
+            'rounded-md px-3 py-1 text-xs font-medium transition',
+            mode === 'auto' ? 'bg-white text-slate-800 shadow-sm dark:bg-[#111b21] dark:text-white' : 'text-slate-500'
+          )}
+        >
+          Otomatik (her bölge ayrı liste)
+        </button>
+        <button
+          onClick={() => setMode('manual')}
+          className={cn(
+            'rounded-md px-3 py-1 text-xs font-medium transition',
+            mode === 'manual' ? 'bg-white text-slate-800 shadow-sm dark:bg-[#111b21] dark:text-white' : 'text-slate-500'
+          )}
+        >
+          Manuel (seçili bölgeler)
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-2 text-sm text-slate-400">
+          <Spinner /> Bölgeler taranıyor…
+        </div>
+      ) : values.length === 0 ? (
+        <div className="py-2 text-sm text-slate-400">Bu sütunda bölge bulunamadı</div>
+      ) : mode === 'auto' ? (
+        <div>
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+            <b>{values.length}</b> liste oluşturulacak (bölge adıyla):
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {values.map((v) => (
+              <Badge key={v.value}>
+                {v.value} · {v.count}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+            İçe aktarılacak bölgeleri seç ({selected.length} seçili):
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {values.map((v) => {
+              const on = selected.includes(v.value)
+              return (
+                <button
+                  key={v.value}
+                  onClick={() => onToggle(v.value)}
+                  className={cn(
+                    'rounded-lg border px-2.5 py-1 text-xs transition',
+                    on
+                      ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                      : 'border-slate-300 text-slate-500 dark:border-white/10'
+                  )}
+                >
+                  {on ? '✓ ' : ''}
+                  {v.value} · {v.count}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

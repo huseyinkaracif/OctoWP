@@ -6,6 +6,8 @@ export const CH = {
 
   CONTACTS_PREVIEW: 'contacts:previewColumns',
   CONTACTS_IMPORT: 'contacts:import',
+  CONTACTS_DISTINCT: 'contacts:distinctValues',
+  CONTACTS_IMPORT_REGION: 'contacts:importByRegion',
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_COUNT: 'contacts:count',
   CONTACTS_ADD: 'contacts:add',

@@ -56,6 +56,8 @@ export interface ColumnMapping {
   phone: string
   name?: string
   vars?: string[]
+  /** column whose distinct values split rows into regions/lists */
+  region?: string
 }
 
 export interface ImportSkip {
@@ -63,12 +65,39 @@ export interface ImportSkip {
   reason: string
 }
 
+/** one list produced by a region-split import */
+export interface RegionGroupResult {
+  listId: number
+  listName: string
+  imported: number
+  duplicates: number
+}
+
 export interface ImportResult {
   total: number
   imported: number
   duplicates: number
   skipped: ImportSkip[]
+  /** list to focus after import (primary list for region splits) */
   listId: number
+  /** present when the import was split by a region column */
+  groups?: RegionGroupResult[]
+}
+
+export interface RegionImportOptions {
+  /** 'auto' = one list per distinct region; 'manual' = selected regions into one list */
+  mode: 'auto' | 'manual'
+  /** manual: only import rows in these region values */
+  regions?: string[]
+  /** manual: existing target list id, or null to create a new one */
+  targetListId?: number | null
+  /** manual: name for the new list when targetListId is null */
+  newListName?: string
+}
+
+export interface DistinctValue {
+  value: string
+  count: number
 }
 
 export interface ImportPreview {
@@ -296,6 +325,14 @@ export interface OctoApi {
   contacts: {
     previewColumns(filePath: string): Promise<ImportPreview>
     import(filePath: string, mapping: ColumnMapping, listId: number): Promise<ImportResult>
+    /** distinct non-empty values of a column, with row counts (for region picker) */
+    distinctValues(filePath: string, column: string): Promise<DistinctValue[]>
+    /** split-import by the mapping's region column into one or many lists */
+    importByRegion(
+      filePath: string,
+      mapping: ColumnMapping,
+      opts: RegionImportOptions
+    ): Promise<ImportResult>
     list(listId?: number): Promise<Contact[]>
     count(): Promise<number>
     add(listId: number, phone: string, name: string | null): Promise<{ ok: boolean; imported: number }>
