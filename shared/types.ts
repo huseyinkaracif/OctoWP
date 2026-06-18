@@ -411,6 +411,7 @@ export interface OctoApi {
     create(input: CreateCampaignInput): Promise<Campaign>
     all(): Promise<Campaign[]>
     get(id: number): Promise<{ campaign: Campaign; recipients: CampaignRecipient[] }>
+    delete(id: number): Promise<void>
     start(id: number): Promise<void>
     pause(id: number): Promise<void>
     resume(id: number): Promise<void>

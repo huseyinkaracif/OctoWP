@@ -105,6 +105,24 @@ describe('Repos campaigns', () => {
     const pending = repos.pendingRecipients(camp.id)
     expect(pending[0].vars.ad).toBeTruthy()
   })
+
+  it('persists template fields and deletes the campaign with its recipients', () => {
+    const camp = repos.createCampaign({
+      name: 'K',
+      listId,
+      templateName: 'promo',
+      templateLang: 'tr',
+      variableMapping: [{ kind: 'column', value: 'ad' }]
+    })
+    const loaded = repos.getCampaign(camp.id)!
+    expect(loaded.templateName).toBe('promo')
+    expect(loaded.variableMapping).toEqual([{ kind: 'column', value: 'ad' }])
+    expect(repos.getRecipients(camp.id).length).toBeGreaterThan(0)
+
+    repos.deleteCampaign(camp.id)
+    expect(repos.getCampaign(camp.id)).toBeNull()
+    expect(repos.getRecipients(camp.id)).toHaveLength(0)
+  })
 })
 
 describe('Repos logs', () => {

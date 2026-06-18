@@ -255,6 +255,11 @@ export function registerIpc(s: IpcServices): void {
     campaign: repos.getCampaign(Number(id)),
     recipients: repos.getRecipients(Number(id))
   }))
+  handle(CH.CAMP_DELETE, (id: number) => {
+    engine.pause(Number(id)) // stop the loop if it is running before removing rows
+    repos.deleteCampaign(Number(id))
+    logger.info('campaign', `deleted #${id}`)
+  })
   handle(CH.CAMP_START, (id: number) => {
     logger.info('campaign', `start #${id}`)
     void engine.start(Number(id))

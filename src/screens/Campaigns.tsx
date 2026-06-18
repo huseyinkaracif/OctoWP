@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Send, Play, Pause, ArrowLeft, Image as ImageIcon, X, Megaphone, RotateCcw, Download, Clock, RefreshCcw } from 'lucide-react'
+import { Plus, Send, Play, Pause, ArrowLeft, Image as ImageIcon, X, Megaphone, RotateCcw, Download, Clock, RefreshCcw, Trash2 } from 'lucide-react'
 import type {
   Campaign,
   CampaignRecipient,
@@ -46,6 +46,12 @@ export function Campaigns() {
     return octo.campaigns.onProgress(() => reload())
   }, [])
 
+  const del = async (c: Campaign) => {
+    if (!window.confirm(`"${c.name}" kampanyası ve tüm alıcı kayıtları silinsin mi?`)) return
+    await octo.campaigns.delete(c.id)
+    reload()
+  }
+
   if (view.t === 'create') return <Composer onBack={() => setView({ t: 'list' })} onCreated={(id) => setView({ t: 'detail', id })} />
   if (view.t === 'detail') return <Detail id={view.id} onBack={() => { reload(); setView({ t: 'list' }) }} />
 
@@ -73,19 +79,28 @@ export function Campaigns() {
           {camps.map((c) => {
             const done = c.stats.sent + c.stats.failed + c.stats.skipped + c.stats.optout
             return (
-              <Card key={c.id} className="cursor-pointer p-5 transition hover:ring-1 hover:ring-brand-500/30">
-                <div onClick={() => setView({ t: 'detail', id: c.id })}>
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{c.name}</span>
-                      {statusBadge(c.status)}
-                    </div>
+              <Card key={c.id} className="group p-5 transition hover:ring-1 hover:ring-brand-500/30">
+                <div className="mb-3 flex items-center justify-between">
+                  <button onClick={() => setView({ t: 'detail', id: c.id })} className="flex min-w-0 items-center gap-2 text-left">
+                    <span className="truncate font-medium">{c.name}</span>
+                    {statusBadge(c.status)}
+                  </button>
+                  <div className="flex items-center gap-3">
                     <span className="text-sm tabular-nums text-slate-500">
                       {c.stats.sent}/{c.stats.total}
                     </span>
+                    <button
+                      onClick={() => del(c)}
+                      title="Kampanyayı sil"
+                      className="text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
-                  <ProgressBar value={pct(done, c.stats.total)} />
                 </div>
+                <button onClick={() => setView({ t: 'detail', id: c.id })} className="block w-full">
+                  <ProgressBar value={pct(done, c.stats.total)} />
+                </button>
               </Card>
             )
           })}
@@ -426,6 +441,13 @@ function Detail({ id, onBack }: { id: number; onBack: () => void }) {
     const path = await octo.campaigns.exportResults(id)
     if (path) toast('Sonuçlar dışa aktarıldı', 'success')
   }
+  const del = async () => {
+    if (!campaign) return
+    if (!window.confirm(`"${campaign.name}" kampanyası ve tüm alıcı kayıtları silinsin mi?`)) return
+    await octo.campaigns.delete(id)
+    toast('Kampanya silindi', 'success')
+    onBack()
+  }
 
   if (!campaign) return <div className="p-6 text-slate-400">Yükleniyor…</div>
   const s = campaign.stats
@@ -465,6 +487,9 @@ function Detail({ id, onBack }: { id: number; onBack: () => void }) {
             )}
             <Button variant="ghost" onClick={exportResults}>
               <Download size={16} /> Dışa aktar
+            </Button>
+            <Button variant="ghost" onClick={del}>
+              <Trash2 size={16} /> Sil
             </Button>
           </div>
         </div>

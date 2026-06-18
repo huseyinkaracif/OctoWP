@@ -294,6 +294,11 @@ export class Repos {
     this.db.prepare('UPDATE campaigns SET status = ? WHERE id = ?').run(status, id)
   }
 
+  /** Delete a campaign and its recipients (FK cascade); send_log history is kept. */
+  deleteCampaign(id: number): void {
+    this.db.prepare('DELETE FROM campaigns WHERE id = ?').run(id)
+  }
+
   campaignsByStatus(status: CampaignStatus): Campaign[] {
     const rows = this.db.prepare('SELECT * FROM campaigns WHERE status = ?').all(status) as any[]
     return rows.map((r) => this.rowToCampaign(r))

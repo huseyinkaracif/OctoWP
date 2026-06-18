@@ -45,6 +45,7 @@ const api: OctoApi = {
     create: (input) => ipcRenderer.invoke(CH.CAMP_CREATE, input),
     all: () => ipcRenderer.invoke(CH.CAMP_ALL),
     get: (id) => ipcRenderer.invoke(CH.CAMP_GET, id),
+    delete: (id) => ipcRenderer.invoke(CH.CAMP_DELETE, id),
     start: (id) => ipcRenderer.invoke(CH.CAMP_START, id),
     pause: (id) => ipcRenderer.invoke(CH.CAMP_PAUSE, id),
     resume: (id) => ipcRenderer.invoke(CH.CAMP_RESUME, id),

@@ -26,6 +26,7 @@ export const CH = {
   CAMP_CREATE: 'campaigns:create',
   CAMP_ALL: 'campaigns:all',
   CAMP_GET: 'campaigns:get',
+  CAMP_DELETE: 'campaigns:delete',
   CAMP_START: 'campaigns:start',
   CAMP_PAUSE: 'campaigns:pause',
   CAMP_RESUME: 'campaigns:resume',
