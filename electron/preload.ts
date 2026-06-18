@@ -11,9 +11,11 @@ function sub(channel: string, cb: (payload: any) => void): () => void {
 const api: OctoApi = {
   wa: {
     getStatus: () => ipcRenderer.invoke(CH.WA_GET_STATUS),
-    connect: () => ipcRenderer.invoke(CH.WA_CONNECT),
-    disconnect: () => ipcRenderer.invoke(CH.WA_DISCONNECT),
     onStatus: (cb) => sub(CH.WA_STATUS_EVENT, cb)
+  },
+  cloud: {
+    verify: () => ipcRenderer.invoke(CH.CLOUD_VERIFY),
+    templates: () => ipcRenderer.invoke(CH.CLOUD_TEMPLATES)
   },
   contacts: {
     previewColumns: (filePath) => ipcRenderer.invoke(CH.CONTACTS_PREVIEW, filePath),
@@ -27,9 +29,7 @@ const api: OctoApi = {
     count: () => ipcRenderer.invoke(CH.CONTACTS_COUNT),
     add: (listId, phone, name) => ipcRenderer.invoke(CH.CONTACTS_ADD, listId, phone, name),
     delete: (id) => ipcRenderer.invoke(CH.CONTACTS_DELETE, id),
-    syncWhatsapp: () => ipcRenderer.invoke(CH.CONTACTS_SYNC_WA),
-    downloadTemplate: () => ipcRenderer.invoke(CH.CONTACTS_TEMPLATE),
-    onSynced: (cb) => sub(CH.CONTACTS_SYNCED_EVENT, cb)
+    downloadTemplate: () => ipcRenderer.invoke(CH.CONTACTS_TEMPLATE)
   },
   lists: {
     create: (name) => ipcRenderer.invoke(CH.LISTS_CREATE, name),
@@ -65,17 +65,6 @@ const api: OctoApi = {
     list: (search) => ipcRenderer.invoke(CH.LOGS_LIST, search),
     clear: () => ipcRenderer.invoke(CH.LOGS_CLEAR)
   },
-  inbox: {
-    conversations: () => ipcRenderer.invoke(CH.INBOX_LIST),
-    conversation: (phone) => ipcRenderer.invoke(CH.INBOX_CONVERSATION, phone),
-    reply: (phone, text) => ipcRenderer.invoke(CH.INBOX_REPLY, phone, text),
-    onMessage: (cb) => sub(CH.INBOX_MESSAGE_EVENT, cb)
-  },
-  autoreply: {
-    listRules: () => ipcRenderer.invoke(CH.AUTOREPLY_LIST),
-    saveRule: (rule) => ipcRenderer.invoke(CH.AUTOREPLY_SAVE, rule),
-    deleteRule: (id) => ipcRenderer.invoke(CH.AUTOREPLY_DELETE, id)
-  },
   templates: {
     list: () => ipcRenderer.invoke(CH.TEMPLATES_LIST),
     save: (t) => ipcRenderer.invoke(CH.TEMPLATES_SAVE, t),
@@ -87,18 +76,6 @@ const api: OctoApi = {
     delete: (id) => ipcRenderer.invoke(CH.TAGS_DELETE, id),
     assign: (contactId, tagId) => ipcRenderer.invoke(CH.TAGS_ASSIGN, contactId, tagId),
     unassign: (contactId, tagId) => ipcRenderer.invoke(CH.TAGS_UNASSIGN, contactId, tagId)
-  },
-  sequences: {
-    list: () => ipcRenderer.invoke(CH.SEQ_LIST),
-    get: (id) => ipcRenderer.invoke(CH.SEQ_GET, id),
-    save: (seq) => ipcRenderer.invoke(CH.SEQ_SAVE, seq),
-    delete: (id) => ipcRenderer.invoke(CH.SEQ_DELETE, id),
-    enroll: (id, source) => ipcRenderer.invoke(CH.SEQ_ENROLL, id, source),
-    onProgress: (cb) => sub(CH.SEQ_PROGRESS_EVENT, cb)
-  },
-  groups: {
-    list: () => ipcRenderer.invoke(CH.GROUPS_LIST),
-    collect: (groupIds, listName) => ipcRenderer.invoke(CH.GROUPS_COLLECT, groupIds, listName)
   },
   backup: {
     export: (password) => ipcRenderer.invoke(CH.BACKUP_EXPORT, password),

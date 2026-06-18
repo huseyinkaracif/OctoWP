@@ -118,7 +118,7 @@ export function Settings() {
 
       {lowDelay && (
         <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-          <AlertTriangle size={16} /> Çok düşük gecikme (&lt;5 sn) tek numarada ban riskini ciddi artırır.
+          <AlertTriangle size={16} /> Çok düşük gecikme (&lt;5 sn) Cloud API hız limitine takılma riskini artırır.
         </div>
       )}
 
@@ -142,12 +142,10 @@ export function Settings() {
 
       <Card className="p-5">
         <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-500">
-          <Clock size={16} /> Limit, ısınma ve aktif saat
+          <Clock size={16} /> Günlük limit ve aktif saat
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Günlük başlangıç" hint="Isınma 1. gün"><NumberInput value={s.dailyCapStart} onChange={num('dailyCapStart')} /></Field>
-          <Field label="Günlük tavan"><NumberInput value={s.dailyCapMax} onChange={num('dailyCapMax')} /></Field>
-          <Field label="Isınma günü"><NumberInput value={s.warmupDays} onChange={num('warmupDays')} /></Field>
+          <Field label="Günlük gönderim limiti" hint="Meta mesajlaşma kademen (250 → 1K → 10K…)"><NumberInput value={s.dailyCapMax} onChange={num('dailyCapMax')} /></Field>
           <Field label="Aktif saat (başlangıç)" hint="0-23"><NumberInput value={s.activeFrom} onChange={num('activeFrom')} /></Field>
           <Field label="Aktif saat (bitiş)" hint="0=24s"><NumberInput value={s.activeTo} onChange={num('activeTo')} /></Field>
         </div>
@@ -166,17 +164,6 @@ export function Settings() {
             />
           </Field>
         </div>
-        <label className="mt-4 flex items-center gap-3 text-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-brand-600"
-            checked={s.typingSimulation}
-            onChange={(e) => set({ typingSimulation: e.target.checked })}
-          />
-          <span>
-            <b>"Yazıyor…" simülasyonu</b> — her mesajdan önce yazıyor göstergesi (insan gibi, anti-ban)
-          </span>
-        </label>
       </Card>
 
       <Card className="p-5">

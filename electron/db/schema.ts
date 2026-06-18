@@ -184,4 +184,9 @@ export function migrate(db: Database.Database): void {
 
   // ---- v2 phase 3 ----
   addColumn(db, 'campaigns', 'scheduled_at', 'INTEGER')
+
+  // ---- v3 Cloud API template fields ----
+  addColumn(db, 'campaigns', 'template_name', 'TEXT')
+  addColumn(db, 'campaigns', 'template_lang', 'TEXT')
+  addColumn(db, 'campaigns', 'variable_mapping', 'TEXT')
 }

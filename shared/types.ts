@@ -31,8 +31,21 @@ export interface Settings extends ThrottleSettings {
   /** inbound replies matching one of these (case-insensitive) trigger opt-out */
   optOutKeywords: string[]
   theme: 'light' | 'dark'
-  /** emit a "typing…" presence before each text send (human realism / anti-ban) */
+  /** emit a "typing…" presence before each text send (legacy, unused on Cloud API) */
   typingSimulation: boolean
+  // ---- WhatsApp Cloud API credentials ----
+  /** Meta System User permanent access token */
+  waToken: string
+  /** WhatsApp Cloud API phone number id */
+  phoneNumberId: string
+  /** WhatsApp Business Account id (for fetching templates) */
+  wabaId: string
+  /** Graph API version, e.g. "v21.0" */
+  graphVersion: string
+  /** cached verified business display name (set after a successful verify) */
+  waVerifiedName: string | null
+  /** cached verified phone, digits only (set after a successful verify) */
+  waVerifiedPhone: string | null
 }
 
 export interface Contact {
@@ -135,6 +148,41 @@ export interface Campaign {
   poll: PollContent | null
   vcard: VCardContent | null
   scheduledAt: number | null
+  // ---- Cloud API template fields ----
+  /** approved template name to send */
+  templateName: string | null
+  /** template language code, e.g. "tr" */
+  templateLang: string | null
+  /** how each body {{n}} variable is filled, in order */
+  variableMapping: CampaignVarSource[]
+}
+
+/** Source for a single template body variable. */
+export type CampaignVarSource =
+  | { kind: 'column'; value: string } // recipient var / list column name
+  | { kind: 'static'; value: string } // fixed literal text
+
+export type WaHeaderFormat = 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT'
+
+/** An approved Cloud API message template, distilled for the composer. */
+export interface WaTemplate {
+  name: string
+  language: string
+  status: string
+  category: string
+  /** number of {{n}} placeholders in the body */
+  bodyVarCount: number
+  headerFormat: WaHeaderFormat
+  /** raw body text (for preview) */
+  bodyText: string
+}
+
+export interface CloudVerifyResult {
+  ok: boolean
+  name?: string
+  phone?: string
+  quality?: string
+  error?: string
 }
 
 export type MediaType = 'image' | 'document' | 'video'
@@ -168,7 +216,7 @@ export interface CampaignRecipient {
 
 export interface CreateCampaignInput {
   name: string
-  messageTemplate: string
+  messageTemplate?: string
   mediaPath?: string | null
   mediaType?: MediaType | null
   listId?: number | null
@@ -178,6 +226,10 @@ export interface CreateCampaignInput {
   contentType?: CampaignContentType
   poll?: PollContent | null
   vcard?: VCardContent | null
+  // ---- Cloud API template fields ----
+  templateName?: string | null
+  templateLang?: string | null
+  variableMapping?: CampaignVarSource[]
 }
 
 export interface Template {
@@ -317,10 +369,15 @@ export interface FileFilter {
 /** The API surface exposed to the renderer via contextBridge (window.octo). */
 export interface OctoApi {
   wa: {
+    /** connection status derived from stored Cloud API credentials */
     getStatus(): Promise<WAStatus>
-    connect(): Promise<void>
-    disconnect(): Promise<void>
     onStatus(cb: (s: WAStatus) => void): () => void
+  }
+  cloud: {
+    /** verify the stored token + phone number id against Meta */
+    verify(): Promise<CloudVerifyResult>
+    /** approved message templates from the WhatsApp Business Account */
+    templates(): Promise<WaTemplate[]>
   }
   contacts: {
     previewColumns(filePath: string): Promise<ImportPreview>
@@ -337,12 +394,8 @@ export interface OctoApi {
     count(): Promise<number>
     add(listId: number, phone: string, name: string | null): Promise<{ ok: boolean; imported: number }>
     delete(id: number): Promise<void>
-    /** pull WhatsApp address-book contacts into the "WhatsApp Kişileri" list */
-    syncWhatsapp(): Promise<{ imported: number; total: number }>
     /** save an example xlsx template; returns the saved path ('' if cancelled) */
     downloadTemplate(): Promise<string>
-    /** fired when WhatsApp contacts are auto-synced; payload = newly added count */
-    onSynced(cb: (count: number) => void): () => void
   }
   lists: {
     create(name: string): Promise<ListDTO>
@@ -380,17 +433,6 @@ export interface OctoApi {
     list(search?: string): Promise<LogEntry[]>
     clear(): Promise<void>
   }
-  inbox: {
-    conversations(): Promise<ConversationSummary[]>
-    conversation(phone: string): Promise<ConversationMessage[]>
-    reply(phone: string, text: string): Promise<{ ok: boolean }>
-    onMessage(cb: () => void): () => void
-  }
-  autoreply: {
-    listRules(): Promise<AutoReplyRule[]>
-    saveRule(rule: Partial<AutoReplyRule>): Promise<AutoReplyRule>
-    deleteRule(id: number): Promise<void>
-  }
   templates: {
     list(): Promise<Template[]>
     save(t: Partial<Template>): Promise<Template>
@@ -402,18 +444,6 @@ export interface OctoApi {
     delete(id: number): Promise<void>
     assign(contactId: number, tagId: number): Promise<void>
     unassign(contactId: number, tagId: number): Promise<void>
-  }
-  sequences: {
-    list(): Promise<Sequence[]>
-    get(id: number): Promise<Sequence | null>
-    save(seq: SequenceInput): Promise<Sequence>
-    delete(id: number): Promise<void>
-    enroll(id: number, source: { listId?: number; tagId?: number }): Promise<number>
-    onProgress(cb: () => void): () => void
-  }
-  groups: {
-    list(): Promise<WAGroup[]>
-    collect(groupIds: string[], listName: string): Promise<{ imported: number; total: number }>
   }
   backup: {
     export(password: string): Promise<string>

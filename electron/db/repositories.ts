@@ -231,12 +231,13 @@ export class Repos {
       const info = this.db
         .prepare(
           `INSERT INTO campaigns (name, message_template, media_path, media_type, settings_snapshot, status, created_at,
-             content_type, poll_question, poll_options, poll_selectable, vcard_name, vcard_phone, scheduled_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             content_type, poll_question, poll_options, poll_selectable, vcard_name, vcard_phone, scheduled_at,
+             template_name, template_lang, variable_mapping)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           input.name,
-          input.messageTemplate,
+          input.messageTemplate ?? '',
           input.mediaPath ?? null,
           input.mediaType ?? null,
           JSON.stringify(this.getSettings()),
@@ -248,7 +249,10 @@ export class Repos {
           input.poll?.selectable ?? null,
           input.vcard?.name ?? null,
           input.vcard?.phone ?? null,
-          input.scheduledAt ?? null
+          input.scheduledAt ?? null,
+          input.templateName ?? null,
+          input.templateLang ?? null,
+          input.variableMapping ? JSON.stringify(input.variableMapping) : null
         )
       const campaignId = Number(info.lastInsertRowid)
       const contacts = this.resolveAudience(input)
@@ -852,7 +856,20 @@ export class Repos {
         ? { question: r.poll_question, options: pollOptions, selectable: r.poll_selectable ?? 1 }
         : null,
       vcard: r.vcard_name ? { name: r.vcard_name, phone: r.vcard_phone } : null,
-      scheduledAt: r.scheduled_at ?? null
+      scheduledAt: r.scheduled_at ?? null,
+      templateName: r.template_name ?? null,
+      templateLang: r.template_lang ?? null,
+      variableMapping: this.parseVarMapping(r.variable_mapping)
+    }
+  }
+
+  private parseVarMapping(v: string | null): Campaign['variableMapping'] {
+    if (!v) return []
+    try {
+      const arr = JSON.parse(v)
+      return Array.isArray(arr) ? arr : []
+    } catch {
+      return []
     }
   }
 

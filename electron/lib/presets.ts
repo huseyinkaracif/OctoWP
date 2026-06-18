@@ -54,7 +54,13 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCountryCode: '90',
   optOutKeywords: ['DUR', 'STOP', 'İPTAL'],
   theme: 'light',
-  typingSimulation: true
+  typingSimulation: false,
+  waToken: '',
+  phoneNumberId: '',
+  wabaId: '',
+  graphVersion: 'v21.0',
+  waVerifiedName: null,
+  waVerifiedPhone: null
 }
 
 /** Merge a preset's throttle values onto existing settings, keeping non-throttle fields. */

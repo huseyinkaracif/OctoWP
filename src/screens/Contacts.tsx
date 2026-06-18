@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Upload, Plus, Ban, Trash2, UserX, X, UserPlus, RefreshCcw, Download, Tag as TagIcon, Search, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
+import { Upload, Plus, Ban, Trash2, UserX, X, UserPlus, Download, Tag as TagIcon, Search, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
 import type { Contact, ListDTO, ImportPreview, ImportResult, ColumnMapping, RegionImportOptions, DistinctValue, OptOutEntry, Tag } from '@shared/types'
 import { octo } from '../lib/ipc'
 import { useToast } from '../lib/toast'
@@ -18,7 +18,6 @@ export function Contacts() {
   const [optouts, setOptouts] = useState<OptOutEntry[]>([])
   const [addOpen, setAddOpen] = useState(false)
   const [newListOpen, setNewListOpen] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [tagMenuContact, setTagMenuContact] = useState<Contact | null>(null)
   const toast = useToast()
@@ -37,10 +36,6 @@ export function Contacts() {
   useEffect(() => {
     loadLists()
     loadTags()
-    return octo.contacts.onSynced((count) => {
-      loadLists()
-      toast(`${count} WhatsApp kişisi senkronlandı`, 'success')
-    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
@@ -105,29 +100,6 @@ export function Contacts() {
     if (selected) octo.contacts.list(selected).then(setContacts)
   }
 
-  const syncWhatsapp = async () => {
-    setSyncing(true)
-    try {
-      const res = await octo.contacts.syncWhatsapp()
-      if (res.total === 0) {
-        toast(
-          'Kişi gelmedi. Tam senkron için Hesap → çıkış yapıp YENİDEN QR okut. Gizli numaralı (LID) kişiler yine alınamaz.',
-          'info'
-        )
-      } else {
-        toast(`${res.imported} yeni numara eklendi (${res.total} kişi tarandı)`, 'success')
-        await loadLists()
-        const wl = (await octo.lists.all()).find((l) => l.name === 'WhatsApp Kişileri')
-        if (wl) {
-          setSelected(wl.id)
-          octo.contacts.list(wl.id).then(setContacts)
-        }
-      }
-    } finally {
-      setSyncing(false)
-    }
-  }
-
   const addManual = async (phone: string, name: string): Promise<boolean> => {
     if (!selected) {
       toast('Önce bir liste seç veya oluştur', 'error')
@@ -155,14 +127,9 @@ export function Contacts() {
         title="Rehber"
         subtitle="Kişileri içe aktar, listeler ve engellenenleri yönet"
         action={
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" onClick={syncWhatsapp} disabled={syncing}>
-              {syncing ? <Spinner /> : <RefreshCcw size={16} />} Kişileri senkronize et
-            </Button>
-            <Button onClick={newList}>
-              <Plus size={16} /> Yeni liste
-            </Button>
-          </div>
+          <Button onClick={newList}>
+            <Plus size={16} /> Yeni liste
+          </Button>
         }
       />
 

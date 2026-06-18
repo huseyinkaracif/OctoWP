@@ -6,15 +6,13 @@ import { TopBar } from './components/TopBar'
 import { Dashboard } from './screens/Dashboard'
 import { Account } from './screens/Account'
 import { Contacts } from './screens/Contacts'
-import { Groups } from './screens/Groups'
 import { Campaigns } from './screens/Campaigns'
-import { Inbox } from './screens/Inbox'
 import { Settings } from './screens/Settings'
 import { Logs } from './screens/Logs'
 
 export default function App() {
   const [route, setRoute] = useState<NavKey>('dashboard')
-  const [wa, setWa] = useState<WAStatus>({ state: 'disconnected', phone: null, name: null, qr: null })
+  const [wa, setWa] = useState<WAStatus>({ state: 'disconnected', phone: null, name: null, qr: null, error: null })
 
   useEffect(() => {
     octo.wa.getStatus().then(setWa)
@@ -30,9 +28,7 @@ export default function App() {
           {route === 'dashboard' && <Dashboard wa={wa} go={setRoute} />}
           {route === 'account' && <Account wa={wa} />}
           {route === 'contacts' && <Contacts />}
-          {route === 'groups' && <Groups wa={wa} />}
           {route === 'campaigns' && <Campaigns />}
-          {route === 'inbox' && <Inbox />}
           {route === 'settings' && <Settings />}
           {route === 'logs' && <Logs />}
         </main>

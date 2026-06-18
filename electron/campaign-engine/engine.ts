@@ -1,7 +1,6 @@
 import type { Campaign, CampaignProgress, RecipientStatus } from '../../shared/types'
-import type { Repos } from '../db/repositories'
-import type { WhatsAppPort } from '../wa-engine/port'
-import { renderMessage } from '../lib/template'
+import type { Repos, EngineRecipient } from '../db/repositories'
+import type { CloudApiPort, SendTemplateInput } from '../wa-engine/port'
 import {
   pickDelaySec,
   isWithinActiveHours,
@@ -12,11 +11,29 @@ import {
 
 export interface EngineDeps {
   repos: Repos
-  wa: WhatsAppPort
+  wa: CloudApiPort
   now?: () => Date
   rng?: () => number
   sleep?: (ms: number) => Promise<void>
   onProgress?: (p: CampaignProgress) => void
+}
+
+/** Build the Cloud API template payload for one recipient. */
+function templateInput(
+  campaign: Campaign,
+  r: EngineRecipient,
+  headerMediaId?: string
+): SendTemplateInput {
+  const bodyParams = (campaign.variableMapping ?? []).map((m) =>
+    m.kind === 'column' ? r.vars[m.value] ?? '' : m.value
+  )
+  return {
+    phone: r.phone,
+    templateName: campaign.templateName ?? '',
+    language: campaign.templateLang || 'tr',
+    bodyParams,
+    headerMediaId
+  }
 }
 
 const RETRY_DELAY_MS = 5_000
@@ -45,7 +62,7 @@ interface Control {
 
 export class CampaignEngine {
   private repos: Repos
-  private wa: WhatsAppPort
+  private wa: CloudApiPort
   private now: () => Date
   private rng: () => number
   private sleep: (ms: number) => Promise<void>
@@ -105,8 +122,28 @@ export class CampaignEngine {
     if (!campaign) return
     const settings = this.repos.getCampaignSettings(campaignId)
 
+    if (!campaign.templateName) {
+      this.repos.setCampaignStatus(campaignId, 'halted')
+      this.emit(campaignId, { note: 'no_template' })
+      this.controls.delete(campaignId)
+      return
+    }
+
     this.repos.setCampaignStatus(campaignId, 'running')
     this.emit(campaignId)
+
+    // upload an image-header once per run; reuse the media id for every send
+    let headerMediaId: string | undefined
+    if (campaign.mediaPath) {
+      const up = await this.wa.uploadMedia(campaign.mediaPath)
+      if ('error' in up) {
+        this.repos.setCampaignStatus(campaignId, 'halted')
+        this.emit(campaignId, { note: 'media_error' })
+        this.controls.delete(campaignId)
+        return
+      }
+      headerMediaId = up.id
+    }
 
     let firstUsed = this.repos.getAccountFirstUsed()
     if (!firstUsed) {
@@ -161,27 +198,9 @@ export class CampaignEngine {
         continue
       }
 
-      // validity check
-      const onWa = await this.wa.exists(r.phone)
-      if (!onWa) {
-        this.markAndLog(campaignId, r.id, r.phone, 'skipped', 'not_on_whatsapp', nowD)
-        this.emit(campaignId, { lastPhone: r.phone, lastStatus: 'skipped' })
-        continue
-      }
-
-      const text = renderMessage(campaign.messageTemplate, r.vars, this.rng)
       const isMedia = !!campaign.mediaPath
-      const isText = campaign.contentType === 'message' && !isMedia
-
-      // typing simulation (human realism / anti-ban) — plain text only
-      if (settings.typingSimulation && isText) {
-        await this.wa.sendPresence(r.phone, 'composing')
-        const typingMs =
-          Math.min(3000, Math.max(700, text.length * 40)) * (0.7 + this.rng() * 0.6)
-        await this.sleep(typingMs)
-      }
-
-      const result = await this.sendOnce(campaign, r.phone, text)
+      const input = templateInput(campaign, r, headerMediaId)
+      const result = await this.wa.sendTemplate(input)
 
       if (result.banned) {
         this.repos.setCampaignStatus(campaignId, 'halted')
@@ -196,7 +215,7 @@ export class CampaignEngine {
       } else {
         // one retry
         await this.sleep(RETRY_DELAY_MS)
-        const retry = await this.sendOnce(campaign, r.phone, text)
+        const retry = await this.wa.sendTemplate(input)
         if (retry.banned) {
           this.repos.setCampaignStatus(campaignId, 'halted')
           this.emit(campaignId, { lastPhone: r.phone, note: 'banned' })
@@ -237,19 +256,6 @@ export class CampaignEngine {
         await this.sleep(delayMs)
       }
     }
-  }
-
-  private async sendOnce(campaign: Campaign, phone: string, text: string) {
-    if (campaign.contentType === 'poll' && campaign.poll) {
-      return this.wa.sendPoll(phone, campaign.poll.question, campaign.poll.options, campaign.poll.selectable)
-    }
-    if (campaign.contentType === 'vcard' && campaign.vcard) {
-      return this.wa.sendVCard(phone, campaign.vcard.name, campaign.vcard.phone)
-    }
-    if (campaign.mediaPath) {
-      return this.wa.sendMedia(phone, campaign.mediaPath, campaign.mediaType ?? 'document', text)
-    }
-    return this.wa.sendText(phone, text)
   }
 
   private markAndLog(

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Smartphone, Users, UsersRound, Send, MessageSquare, Settings, ScrollText } from 'lucide-react'
+import { LayoutDashboard, Smartphone, Users, Send, Settings, ScrollText } from 'lucide-react'
 import type { WAStatus } from '@shared/types'
 import { cn, displayPhone } from '../lib/format'
 
@@ -6,9 +6,7 @@ export type NavKey =
   | 'dashboard'
   | 'account'
   | 'contacts'
-  | 'groups'
   | 'campaigns'
-  | 'inbox'
   | 'settings'
   | 'logs'
 
@@ -16,9 +14,7 @@ const items: { key: NavKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Genel Bakış', icon: LayoutDashboard },
   { key: 'account', label: 'Hesap', icon: Smartphone },
   { key: 'contacts', label: 'Rehber', icon: Users },
-  { key: 'groups', label: 'Gruplar', icon: UsersRound },
   { key: 'campaigns', label: 'Kampanyalar', icon: Send },
-  { key: 'inbox', label: 'Gelen Kutusu', icon: MessageSquare },
   { key: 'settings', label: 'Ayarlar', icon: Settings },
   { key: 'logs', label: 'Loglar', icon: ScrollText }
 ]

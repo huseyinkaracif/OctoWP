@@ -2,7 +2,7 @@ import { ipcMain, dialog, app } from 'electron'
 import { z } from 'zod'
 import { CH } from './channels'
 import type { Repos } from '../db/repositories'
-import type { WhatsAppPort } from '../wa-engine/port'
+import type { CloudApiPort } from '../wa-engine/port'
 import type { CampaignEngine } from '../campaign-engine/engine'
 import * as XLSX from 'xlsx'
 import { readSheetFile, mapRows, mapRowsByRegion, distinctValues } from '../contacts/import'
@@ -12,13 +12,27 @@ import { exportBackup, importBackup } from '../settings/backup'
 import { getDatabase } from '../db/database'
 import { dailyCap, warmupDayIndex } from '../lib/throttle'
 import { logger } from '../logging/logger'
-import type { RiskPresetName, Settings } from '../../shared/types'
+import type { RiskPresetName, Settings, WAStatus } from '../../shared/types'
 
 export interface IpcServices {
   repos: Repos
-  wa: WhatsAppPort
+  wa: CloudApiPort
   engine: CampaignEngine
   dbPath: string
+  /** send an event to the renderer (e.g. status updates) */
+  emit: (channel: string, payload: unknown) => void
+}
+
+/** Derive the connection status shown in the UI from stored credentials. */
+export function computeWaStatus(s: Settings): WAStatus {
+  const configured = !!(s.waToken && s.phoneNumberId)
+  return {
+    state: configured ? 'connected' : 'disconnected',
+    phone: s.waVerifiedPhone,
+    name: s.waVerifiedName,
+    qr: null,
+    error: null
+  }
 }
 
 const mappingSchema = z.object({
@@ -37,7 +51,7 @@ const regionImportSchema = z.object({
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
-  messageTemplate: z.string(),
+  messageTemplate: z.string().optional(),
   mediaPath: z.string().nullable().optional(),
   mediaType: z.enum(['image', 'document', 'video']).nullable().optional(),
   listId: z.number().int().positive().nullable().optional(),
@@ -49,7 +63,12 @@ const createSchema = z.object({
     .object({ question: z.string(), options: z.array(z.string()), selectable: z.number() })
     .nullable()
     .optional(),
-  vcard: z.object({ name: z.string(), phone: z.string() }).nullable().optional()
+  vcard: z.object({ name: z.string(), phone: z.string() }).nullable().optional(),
+  templateName: z.string().nullable().optional(),
+  templateLang: z.string().nullable().optional(),
+  variableMapping: z
+    .array(z.object({ kind: z.enum(['column', 'static']), value: z.string() }))
+    .optional()
 })
 
 const templateSchema = z.object({
@@ -58,29 +77,6 @@ const templateSchema = z.object({
   body: z.string(),
   mediaPath: z.string().nullable().optional(),
   mediaType: z.enum(['image', 'document', 'video']).nullable().optional()
-})
-
-const seqSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().min(1),
-  steps: z.array(
-    z.object({
-      ord: z.number().optional(),
-      body: z.string().min(1),
-      delayHours: z.number(),
-      condition: z.enum(['always', 'if_no_reply'])
-    })
-  )
-})
-
-const ruleSchema = z.object({
-  id: z.number().optional(),
-  kind: z.enum(['keyword', 'greeting', 'away']),
-  name: z.string().optional(),
-  keywords: z.array(z.string()).optional(),
-  matchType: z.enum(['contains', 'exact', 'starts']).optional(),
-  reply: z.string().min(1),
-  enabled: z.boolean().optional()
 })
 
 export function registerIpc(s: IpcServices): void {
@@ -98,16 +94,25 @@ export function registerIpc(s: IpcServices): void {
     })
   }
 
-  // ---- WhatsApp ----
-  handle(CH.WA_GET_STATUS, () => wa.getStatus())
-  handle(CH.WA_CONNECT, () => {
-    logger.info('ipc', 'wa.connect requested')
-    return wa.connect()
+  // ---- WhatsApp Cloud API ----
+  handle(CH.WA_GET_STATUS, () => computeWaStatus(repos.getSettings()))
+  handle(CH.CLOUD_VERIFY, async () => {
+    const res = await wa.verifyConnection()
+    if (res.ok) {
+      const cur = repos.getSettings()
+      repos.saveSettings({
+        ...cur,
+        waVerifiedName: res.name ?? null,
+        waVerifiedPhone: res.phone ? res.phone.replace(/\D/g, '') : null
+      })
+      logger.info('cloud', `verified: ${res.name ?? ''} ${res.phone ?? ''} (kalite: ${res.quality ?? '—'})`)
+    } else {
+      logger.warn('cloud', `verify failed: ${res.error ?? 'unknown'}`)
+    }
+    s.emit(CH.WA_STATUS_EVENT, computeWaStatus(repos.getSettings()))
+    return res
   })
-  handle(CH.WA_DISCONNECT, () => {
-    logger.info('ipc', 'wa.disconnect requested')
-    return wa.disconnect()
-  })
+  handle(CH.CLOUD_TEMPLATES, () => wa.listTemplates())
 
   // ---- contacts ----
   handle(CH.CONTACTS_PREVIEW, (filePath: string) => {
@@ -199,20 +204,6 @@ export function registerIpc(s: IpcServices): void {
   handle(CH.CONTACTS_DELETE, (id: number) => {
     repos.deleteContact(Number(id))
     logger.info('contacts', `deleted contact #${id}`)
-  })
-
-  handle(CH.CONTACTS_SYNC_WA, async () => {
-    await wa.resyncContacts()
-    const contacts = wa.getContacts()
-    const listId = repos.getOrCreateList('WhatsApp Kişileri').id
-    const rows = contacts.map((c) => {
-      const vars: Record<string, string> = {}
-      if (c.name) vars.ad = c.name
-      return { phone: c.phone, name: c.name, vars }
-    })
-    const { imported } = repos.bulkImportContacts(rows, listId)
-    logger.info('contacts', `manual WA sync: ${imported} new of ${contacts.length}`)
-    return { imported, total: contacts.length }
   })
 
   handle(CH.CONTACTS_TEMPLATE, async () => {
@@ -346,24 +337,6 @@ export function registerIpc(s: IpcServices): void {
     }
   })
 
-  // ---- groups (v2: number collection) ----
-  handle(CH.GROUPS_LIST, () => wa.listGroups())
-  handle(CH.GROUPS_COLLECT, async (groupIds: string[], listName: string) => {
-    const ids = Array.isArray(groupIds) ? groupIds.map(String) : []
-    const seen = new Set<string>()
-    for (const id of ids) {
-      const members = await wa.groupParticipants(id)
-      for (const m of members) seen.add(m.phone)
-    }
-    const listId = repos.getOrCreateList(String(listName).slice(0, 120) || 'Grup Numaraları').id
-    const { imported } = repos.bulkImportContacts(
-      [...seen].map((phone) => ({ phone, name: null, vars: {} as Record<string, string> })),
-      listId
-    )
-    logger.info('groups', `collected ${seen.size} unique numbers from ${ids.length} groups, ${imported} new`)
-    return { imported, total: seen.size }
-  })
-
   // ---- templates ----
   handle(CH.TEMPLATES_LIST, () => repos.listTemplates())
   handle(CH.TEMPLATES_SAVE, (t: unknown) => repos.saveTemplate(templateSchema.parse(t)))
@@ -381,47 +354,6 @@ export function registerIpc(s: IpcServices): void {
   handle(CH.TAGS_UNASSIGN, (contactId: number, tagId: number) =>
     repos.unassignTag(Number(contactId), Number(tagId))
   )
-
-  // ---- sequences (drip) ----
-  handle(CH.SEQ_LIST, () => repos.listSequences())
-  handle(CH.SEQ_GET, (id: number) => repos.getSequence(Number(id)))
-  handle(CH.SEQ_SAVE, (seq: unknown) => {
-    const parsed = seqSchema.parse(seq)
-    const steps = parsed.steps.map((s, i) => ({
-      ord: i,
-      body: s.body,
-      delayHours: s.delayHours,
-      condition: s.condition
-    }))
-    const saved = repos.saveSequence({ id: parsed.id, name: parsed.name, steps })
-    logger.info('sequence', `saved "${saved.name}" (#${saved.id}) with ${steps.length} steps`)
-    return saved
-  })
-  handle(CH.SEQ_DELETE, (id: number) => repos.deleteSequence(Number(id)))
-  handle(CH.SEQ_ENROLL, (id: number, source: { listId?: number; tagId?: number }) => {
-    const audience = repos.resolveAudience({ listId: source?.listId, tagId: source?.tagId })
-    const eligible = audience.filter((c) => !repos.isOptedOut(c.phone))
-    const n = repos.enrollSequence(Number(id), eligible, Date.now())
-    logger.info('sequence', `enrolled ${n} contacts into #${id}`)
-    return n
-  })
-
-  // ---- inbox ----
-  handle(CH.INBOX_LIST, () => repos.listConversations())
-  handle(CH.INBOX_CONVERSATION, (phone: string) => repos.getConversation(String(phone)))
-  handle(CH.INBOX_REPLY, async (phone: string, text: string) => {
-    const res = await wa.sendText(String(phone), String(text))
-    if (res.ok) {
-      repos.recordOutbound(String(phone), String(text), Date.now())
-      logger.info('inbox', `manual reply to ${phone}`)
-    }
-    return { ok: res.ok }
-  })
-
-  // ---- auto-reply ----
-  handle(CH.AUTOREPLY_LIST, () => repos.listAutoReplyRules())
-  handle(CH.AUTOREPLY_SAVE, (rule: unknown) => repos.saveAutoReplyRule(ruleSchema.parse(rule)))
-  handle(CH.AUTOREPLY_DELETE, (id: number) => repos.deleteAutoReplyRule(Number(id)))
 
   // ---- logs ----
   handle(CH.LOGS_LIST, (search?: string) => repos.listLogs(search ? String(search) : undefined))

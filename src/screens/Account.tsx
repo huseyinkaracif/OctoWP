@@ -1,110 +1,125 @@
 import { useEffect, useState } from 'react'
-import QRCode from 'qrcode'
-import { Smartphone, LogOut, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
-import type { WAStatus } from '@shared/types'
+import { KeyRound, CheckCircle2, AlertTriangle, ShieldCheck, Save } from 'lucide-react'
+import type { WAStatus, Settings as SettingsT, CloudVerifyResult } from '@shared/types'
 import { octo } from '../lib/ipc'
-import { Card, SectionTitle, Button, Spinner } from '../components/ui'
+import { useToast } from '../lib/toast'
+import { Card, SectionTitle, Button, Field, TextInput, Spinner } from '../components/ui'
 import { displayPhone } from '../lib/format'
 
 export function Account({ wa }: { wa: WAStatus }) {
-  const [qrImg, setQrImg] = useState<string | null>(null)
+  const [s, setS] = useState<SettingsT | null>(null)
   const [busy, setBusy] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [result, setResult] = useState<CloudVerifyResult | null>(null)
+  const toast = useToast()
 
   useEffect(() => {
-    if (wa.qr) {
-      QRCode.toDataURL(wa.qr, { width: 260, margin: 1 }).then(setQrImg).catch(() => setQrImg(null))
-    } else {
-      setQrImg(null)
-    }
-  }, [wa.qr])
+    octo.settings.get().then(setS)
+  }, [])
 
-  const connect = async () => {
+  if (!s) return <div className="p-6 text-slate-400">Yükleniyor…</div>
+
+  const set = (patch: Partial<SettingsT>) => setS({ ...s, ...patch })
+
+  const save = async () => {
     setBusy(true)
     try {
-      await octo.wa.connect()
+      const next = await octo.settings.set({
+        waToken: s.waToken.trim(),
+        phoneNumberId: s.phoneNumberId.trim(),
+        wabaId: s.wabaId.trim(),
+        graphVersion: s.graphVersion.trim() || 'v21.0'
+      })
+      setS(next)
+      toast('Kimlik bilgileri kaydedildi', 'success')
     } finally {
       setBusy(false)
     }
   }
-  const disconnect = async () => {
-    setBusy(true)
+
+  const verify = async () => {
+    await save()
+    setVerifying(true)
     try {
-      await octo.wa.disconnect()
+      const res = await octo.cloud.verify()
+      setResult(res)
+      toast(res.ok ? 'Bağlantı doğrulandı' : `Doğrulanamadı: ${res.error ?? ''}`, res.ok ? 'success' : 'error')
     } finally {
-      setBusy(false)
+      setVerifying(false)
     }
   }
+
+  const connected = wa.state === 'connected'
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <SectionTitle title="Hesap" subtitle="WhatsApp numaranı QR ile bağla" />
+      <SectionTitle title="Hesap" subtitle="WhatsApp Cloud API (resmî) kimlik bilgileri" />
 
-      {wa.error && wa.state !== 'connected' && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-          <AlertTriangle size={16} /> {wa.error}
-        </div>
-      )}
-
-      {wa.state === 'connected' ? (
+      {connected && (
         <Card className="p-6">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-500/15">
               <CheckCircle2 size={28} />
             </div>
             <div className="flex-1">
-              <div className="text-lg font-semibold">{wa.name || 'WhatsApp Hesabı'}</div>
+              <div className="text-lg font-semibold">{wa.name || 'WhatsApp İşletme'}</div>
               <div className="text-sm text-slate-500 dark:text-slate-400">
-                {wa.phone ? displayPhone(wa.phone) : 'Bağlı'}
+                {wa.phone ? displayPhone(wa.phone) : 'Kimlik bilgileri kayıtlı'}
               </div>
             </div>
-            <Button variant="danger" onClick={disconnect} disabled={busy}>
-              {busy ? <Spinner /> : <LogOut size={16} />} Bağlantıyı kes
-            </Button>
-          </div>
-        </Card>
-      ) : (
-        <Card className="p-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6 dark:border-white/10 dark:bg-black/20">
-              {qrImg ? (
-                <img src={qrImg} alt="WhatsApp QR" className="rounded-xl bg-white p-2" />
-              ) : wa.state === 'connecting' ? (
-                <div className="flex flex-col items-center gap-3 py-12 text-slate-400">
-                  <Spinner className="h-6 w-6 text-brand-500" />
-                  <span className="text-sm">QR oluşturuluyor…</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-3 py-12 text-center text-slate-400">
-                  <Smartphone size={40} />
-                  <span className="text-sm">Bağlanmak için QR oluştur</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col justify-between">
-              <div>
-                <div className="font-medium">Nasıl bağlanır?</div>
-                <ol className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                  <li>1. Telefonunda WhatsApp&apos;ı aç.</li>
-                  <li>2. <b>Ayarlar → Bağlı Cihazlar</b>&apos;a gir.</li>
-                  <li>3. <b>Cihaz Bağla</b>&apos;ya dokun.</li>
-                  <li>4. Buradaki QR kodu okut.</li>
-                </ol>
-              </div>
-              <div className="mt-5">
-                <Button onClick={connect} disabled={busy || wa.state === 'connecting'}>
-                  {busy || wa.state === 'connecting' ? <Spinner /> : <RefreshCw size={16} />}
-                  {wa.state === 'qr' ? 'Yeni QR' : 'Bağlan'}
-                </Button>
-              </div>
-            </div>
+            {result?.quality && (
+              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-white/5 dark:text-slate-300">
+                Kalite: {result.quality}
+              </span>
+            )}
           </div>
         </Card>
       )}
 
+      <Card className="space-y-4 p-6">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+          <KeyRound size={16} /> Cloud API kimlik bilgileri
+        </div>
+
+        <Field label="Access Token" hint="Meta System User süresiz token">
+          <TextInput
+            type="password"
+            placeholder="EAAG…"
+            value={s.waToken}
+            onChange={(e) => set({ waToken: e.target.value })}
+          />
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Phone Number ID">
+            <TextInput placeholder="1234567890" value={s.phoneNumberId} onChange={(e) => set({ phoneNumberId: e.target.value })} />
+          </Field>
+          <Field label="WhatsApp Business Account ID (WABA)">
+            <TextInput placeholder="1234567890" value={s.wabaId} onChange={(e) => set({ wabaId: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="Graph API sürümü" hint="Varsayılan v21.0">
+          <TextInput placeholder="v21.0" value={s.graphVersion} onChange={(e) => set({ graphVersion: e.target.value })} />
+        </Field>
+
+        {result && !result.ok && (
+          <div className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+            <AlertTriangle size={16} /> {result.error}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={save} disabled={busy}>
+            {busy ? <Spinner /> : <Save size={16} />} Kaydet
+          </Button>
+          <Button onClick={verify} disabled={verifying || !s.waToken || !s.phoneNumberId}>
+            {verifying ? <Spinner /> : <ShieldCheck size={16} />} Bağlantıyı test et
+          </Button>
+        </div>
+      </Card>
+
       <p className="text-xs text-slate-400">
-        Not: Resmi olmayan bağlantı WhatsApp kullanım şartlarına aykırıdır; numara ban riski her zaman
-        vardır. Güvenli gönderim ayarlarını kullan.
+        Kurulum adımları için <b>docs/whatsapp-cloud-api-setup.md</b> dosyasına bak. Pazarlama mesajları
+        için Meta'da onaylı şablon gerekir; mesaj başına ücret ve kademeli günlük limit uygulanır.
       </p>
     </div>
   )
